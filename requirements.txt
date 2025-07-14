@@ -1,0 +1,16 @@
+--extra-index-url https://download.pytorch.org/whl/cu121
+selenium
+webdriver-manager
+beautifulsoup4 
+
+faster-whisper
+sounddevice
+numpy
+torch 
+ctranslate2
+torchaudio
+PySoundFile
+pyaudio
+google-generativeai
+customtkinter
+google-ai-generativelanguage
