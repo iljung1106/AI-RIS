@@ -10,8 +10,8 @@ APP_CONFIG = {
         "enabled": True,
         "devices": {0: {"nickname": "한가운데(voice conversation)", "amplification": 1.0}},
         "params": {
-            "model_size": "large-v3", "language": "ko",
-            "silence_duration_s": 0.5, "vad_threshold": 0.5
+            "model_size": "iic/SenseVoiceSmall", "language": "auto",
+            "silence_duration_s": 0.5, "vad_threshold": 0.01
         }
     },
     "tts": {

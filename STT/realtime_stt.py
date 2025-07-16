@@ -2,35 +2,24 @@ import time
 import threading
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
+from funasr_onnx import SenseVoiceSmall
+from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
 import torch
 from collections import deque
 
 class RealTimeSTT:
     """
     VAD(음성 감지), 마이크별 증폭 기능을 포함한 실시간 STT 클래스.
-    사용자가 말을 멈추면 녹음된 음성을 텍스트로 변환합니다.
-
-    Args:
-        device_config (dict): 마이크 장치 설정.
-            - 형식: {device_index: {"nickname": str, "amplification": float}}
-            - 예: {0: {"nickname": "마이크1", "amplification": 1.5}}
-        on_text_transcribed (callable): 텍스트 변환 시 호출될 콜백 함수.
-            - 인자: (nickname, text)
-        model_size (str): Whisper 모델 크기 또는 HuggingFace 저장소 ID.
-        language (str): 인식할 언어 코드 (e.g., "ko", "en").
-        silence_duration_s (float): 음성으로 간주하지 않을 침묵의 시간 (초).
-        max_buffer_seconds (int): 최대 녹음 버퍼 크기 (초). 이 시간을 초과하면 자동으로 처리.
-        vad_threshold (float): VAD의 음성 감지 민감도 (0.0 ~ 1.0). 낮을수록 민감.
+    (상태 기반 VAD 로직으로 개선된 버전)
     """
     def __init__(self,
                  device_config: dict,
                  on_text_transcribed: callable,
-                 model_size: str = "deepdml/faster-whisper-large-v3-turbo-ct2",
-                 language: str = "ko",
-                 silence_duration_s: float = 2.0,
+                 model_size: str = "iic/SenseVoiceSmall",
+                 language: str = "auto",
+                 silence_duration_s: float = 0.5, # 침묵 시간을 약간 줄여 반응성 개선
                  max_buffer_seconds: int = 30,
-                 vad_threshold: float = 0.5):
+                 vad_threshold: float = 0.01): # RMS 임계값
 
         self.device_config = device_config
         self.on_text_transcribed = on_text_transcribed
@@ -38,47 +27,43 @@ class RealTimeSTT:
         self.language = language
         self.silence_duration_s = silence_duration_s
         self.max_buffer_seconds = max_buffer_seconds
-        self.vad_threshold = vad_threshold
+        self.vad_threshold = vad_threshold # RMS 임계값으로 사용
 
-        self.samplerate = 16000  # Whisper 모델의 요구사항
-        self.chunk_samples = 1024  # 작은 오디오 조각 크기
+        self.samplerate = 16000
+        self.chunk_samples = 1024 # 약 64ms
         self.running = False
         self.threads = []
         self.model = None
 
     @staticmethod
     def get_available_devices():
-        """Returns a list of available audio input devices."""
         devices = sd.query_devices()
         input_devices = []
         for i, device in enumerate(devices):
-            # Check if it's an input device (has input channels)
             if device['max_input_channels'] > 0:
                 input_devices.append({'id': i, 'name': device['name'], 'hostapi_name': device['hostapi']})
         return input_devices
 
     def _load_model(self):
-        """Whisper 모델을 로드합니다."""
         print(f"[STT] '{self.model_size}' 모델을 로드하는 중...")
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        compute_type = "float16" if device == "cuda" else "int8"
-        
-        if device == "cpu" and compute_type == "float16":
-            print("[STT] 경고: CPU에서는 float16을 지원하지 않습니다. compute_type을 'int8'로 변경합니다.")
-            compute_type = "int8"
-            
-        self.model = WhisperModel(self.model_size, device=device, compute_type=compute_type)
-        print(f"[STT] 모델 로드 완료. (장치: {device}, 계산 타입: {compute_type})")
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        quantize = True if device == "cpu" else False
+        self.model = SenseVoiceSmall(self.model_size, quantize=quantize, device=device)
+        print(f"[STT] 모델 로드 완료. (장치: {device}, 양자화: {quantize})")
 
     def _process_mic_input(self, device_index: int, config: dict):
         """
-        개별 마이크 입력을 실시간으로 처리하는 스레드 워커 함수.
+        개선된 상태 기반 VAD 로직을 사용하는 스레드 워커 함수.
         """
         nickname = config["nickname"]
         amplification = config.get("amplification", 1.0)
         
+        # --- 상태 관리를 위한 변수 ---
+        speaking = False
         audio_buffer = deque()
-        silence_chunks = 0
+        # 말이 시작되기 전의 오디오를 저장하여 문맥을 확보 (0.5초)
+        pre_buffer = deque(maxlen=int(0.5 * self.samplerate / self.chunk_samples))
+        silence_chunks_counter = 0
         max_silence_chunks = int(self.silence_duration_s * self.samplerate / self.chunk_samples)
         max_buffer_chunks = int(self.max_buffer_seconds * self.samplerate / self.chunk_samples)
 
@@ -95,82 +80,113 @@ class RealTimeSTT:
                     if overflowed:
                         print(f"⚠️ [{nickname}] 오디오 버퍼 오버플로우 발생!")
                     
-                    # 1. 소리 증폭
                     chunk *= amplification
-                    
-                    # 2. 음성 활동 감지 (간단한 RMS 기반)
-                    # VAD 필터는 긴 오디오에 더 효과적이므로, 실시간 청크는 RMS로 판단
-                    is_speech = np.sqrt(np.mean(chunk**2)) > 0.01  # 임계값, 환경에 따라 조절
-                    
-                    if is_speech:
-                        silence_chunks = 0
+                    is_speech = np.sqrt(np.mean(chunk**2)) > self.vad_threshold
+
+                    # --- 상태 기반 로직 ---
+                    if speaking:
+                        # 2. 말하는 중 상태
                         audio_buffer.append(chunk)
-                        # print(f"[STT] Speech detected. Buffer size: {len(audio_buffer)} ") # Too noisy
-                    else:
-                        silence_chunks += 1
-                    
-                    # 3. STT 처리 조건 확인
-                    # 조건 A: 말이 끝나고 일정 시간 침묵이 흐른 경우
-                    # 조건 B: 버퍼가 너무 길어진 경우 (중간 결과 출력)
-                    should_transcribe = (len(audio_buffer) > 0 and silence_chunks > max_silence_chunks) or \
-                                        (len(audio_buffer) > max_buffer_chunks)
-
-                    if should_transcribe:
-                        print(f"[STT] Transcribing audio buffer (size: {len(audio_buffer)} chunks).")
-                        # 버퍼의 오디오 데이터를 하나로 합침
-                        full_audio = np.concatenate(list(audio_buffer)).flatten()
-                        audio_buffer.clear()
-                        silence_chunks = 0
                         
-                        # faster-whisper 모델로 STT 수행
-                        segments, _ = self.model.transcribe(
-                            full_audio,
-                            language=self.language,
-                            vad_filter=True,
-                            vad_parameters={"threshold": self.vad_threshold}
-                        )
-                        
-                        transcribed_text = "".join(segment.text for segment in segments).strip()
-
-                        if transcribed_text:
-                            print(f"[STT] Transcribed text: '{transcribed_text}'. Calling callback.")
-                            self.on_text_transcribed(nickname, transcribed_text)
+                        if not is_speech:
+                            silence_chunks_counter += 1
                         else:
-                            print("[STT] Transcribed text is empty or only whitespace.")
+                            silence_chunks_counter = 0 # 말이 다시 감지되면 침묵 카운터 초기화
+                        
+                        # 말이 끝났다고 판단 (충분한 침묵이 지속) 또는 버퍼가 꽉 찼을 때
+                        if silence_chunks_counter > max_silence_chunks or len(audio_buffer) > max_buffer_chunks:
+                            speaking = False # 상태를 '대기 중'으로 변경
+                            
+                            # STT 처리
+                            full_audio = np.concatenate(list(audio_buffer)).flatten()
+                            audio_buffer.clear()
+                            pre_buffer.clear() # 버퍼 초기화
+                            
+                            print(f"[STT] 변환 시작 (오디오 길이: {len(full_audio)/self.samplerate:.2f}초)...")
+                            res = self.model(full_audio, language=self.language, use_itn=True)
+                            transcribed_text = rich_transcription_postprocess(res[0]).strip() if res and res[0] else ""
+
+                            if transcribed_text:
+                                self.on_text_transcribed(nickname, transcribed_text)
+                            else:
+                                print("[STT] 변환된 텍스트가 없습니다.")
+                    else:
+                        # 1. 대기 상태
+                        if is_speech:
+                            # 말이 시작됨 -> '말하는 중' 상태로 변경
+                            speaking = True
+                            print(f"[{nickname}] 음성 감지됨, 녹음 시작...")
+                            # pre-buffer에 있던 오디오와 현재 청크를 메인 버퍼에 추가
+                            audio_buffer.extend(pre_buffer)
+                            audio_buffer.append(chunk)
+                            silence_chunks_counter = 0
+                        else:
+                            # 말이 없을 때는 pre-buffer에만 오디오를 저장
+                            pre_buffer.append(chunk)
 
         except Exception as e:
             print(f"❌ [{nickname}] 스레드에서 오류 발생: {e}")
         finally:
             print(f"🛑 [{nickname}] 마이크(장치 #{device_index}) 청취 중지.")
 
-
     def start(self):
-        """STT 처리를 시작합니다."""
         if self.running:
             print("[STT] 이미 STT가 실행 중입니다.")
             return
-
         self._load_model()
         self.running = True
-
         for device_index, config in self.device_config.items():
             thread = threading.Thread(target=self._process_mic_input, args=(device_index, config))
             self.threads.append(thread)
             thread.start()
-        
         print(f"[STT] 총 {len(self.threads)}개의 마이크에 대한 STT 처리를 시작했습니다.")
 
-
     def stop(self):
-        """STT 처리를 중지합니다."""
         if not self.running:
             return
-
         print("[STT] STT 처리를 중지하는 중...")
         self.running = False
         for thread in self.threads:
             thread.join()
-        
         self.threads = []
         self.model = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         print("[STT] 모든 STT 처리가 안전하게 종료되었습니다.")
+
+# --- 사용 예시 ---
+if __name__ == '__main__':
+    def handle_transcription(nickname, text):
+        print(f"\n>> [{nickname}] 최종 결과: {text}\n")
+
+    print("사용 가능한 오디오 장치:")
+    available_devices = RealTimeSTT.get_available_devices()
+    for device in available_devices:
+        print(f"  - ID {device['id']}: {device['name']} ({device['hostapi_name']})")
+    
+    if available_devices:
+        mic_id = available_devices[0]['id']
+        mic_name = available_devices[0]['name']
+
+        MY_DEVICE_CONFIG = { mic_id: {"nickname": mic_name, "amplification": 1.5} }
+
+        stt_system = RealTimeSTT(
+            device_config=MY_DEVICE_CONFIG,
+            on_text_transcribed=handle_transcription,
+            model_size="iic/SenseVoiceSmall",
+            language="ko",
+            silence_duration_s=1.5, # 1.5초 침묵 시 처리
+            vad_threshold=0.01      # 마이크 환경에 따라 0.005 ~ 0.02 사이로 조절해보세요.
+        )
+
+        stt_system.start()
+        try:
+            print("\nSTT 시스템이 실행 중입니다. 종료하려면 Ctrl+C를 누르세요.")
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n종료 신호를 받았습니다...")
+        finally:
+            stt_system.stop()
+    else:
+        print("\n사용 가능한 입력 오디오 장치가 없습니다. 프로그램을 종료합니다.")

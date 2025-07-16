@@ -7,11 +7,10 @@
                 "amplification": 1.0
             }
         },
-        "params": {
-            "model_size": "large-v3",
-            "language": "ko",
-            "silence_duration_s": 0.5,
-            "vad_threshold": 0.5
+    "params": {
+            "model_size": "iic/SenseVoiceSmall", "language": "auto",
+            "silence_duration_s": 0.5, "vad_threshold": 0.01,
+            "max_buffer_seconds": 15
         }
     },
     "tts": {
