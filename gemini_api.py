@@ -21,6 +21,11 @@ class GeminiAPI:
         self.history = deque(maxlen=max_history_length)
         print(f"Gemini API client initialized with model: {model_name}")
 
+    def add_system_message(self, message: str):
+        """Add a system message to the conversation history."""
+        self.history.append({'role': 'system', 'parts': [message]})
+        print(f"[GeminiAPI] Added system message: {message}")
+
     def add_to_history(self, role: str, text: str):
         self.history.append({'role': role, 'parts': [text]})
 
@@ -28,6 +33,35 @@ class GeminiAPI:
         if not self.history:
             return "(No conversation history yet)"
         return "\n".join([f"{msg['role']}: {msg['parts'][0]}" for msg in self.history])
+
+    def refine_stt_text(self, raw_text: str) -> str:
+        """
+        Refines the raw text from STT using Gemini for better clarity and grammar.
+        """
+        try:
+            # STT 결과물을 자연스럽게 다듬도록 요청하는 프롬프트
+            prompt = f"""Please refine the following text, which was transcribed from speech. Correct any grammatical errors, make it more natural-sounding, but preserve the original meaning. Output only the refined text. Do not change the text if it is already correct.
+
+            # Raw Text: "{raw_text}"
+            # Refined Text:"""
+            
+            # generation_config = types.GenerateContentConfig(
+            #     thinking_config=types.ThinkingConfig(
+            #         thinking_budget=0
+            #     )
+            # )
+            # response = self.client.models.generate_content(
+            #     model=self.model_path,
+            #     contents=prompt,
+            #     config=generation_config,
+            # )
+            # refined_text = response.text.strip()
+            refined_text = raw_text
+            print(f"[GeminiAPI] STT Refinement: '{raw_text}' -> '{refined_text}'")
+            return refined_text
+        except Exception as e:
+            print(f"Error refining STT text: {e}")
+            return raw_text # 정제 실패 시 원본 텍스트 반환
 
     def generate_response(self, full_prompt: str, task_prompt: str) -> str:
         """

@@ -37,11 +37,33 @@ class RealTimeSTT:
 
     @staticmethod
     def get_available_devices():
+        """Get available input devices that are actually usable."""
         devices = sd.query_devices()
         input_devices = []
+        
         for i, device in enumerate(devices):
-            if device['max_input_channels'] > 0:
-                input_devices.append({'id': i, 'name': device['name'], 'hostapi_name': device['hostapi']})
+            # Check if device has input channels and is not a disabled/virtual device
+            if (device['max_input_channels'] > 0 and 
+                device['hostapi'] >= 0 and  # Valid host API
+                'Microsoft Sound Mapper' not in device['name'] and  # Skip generic mappers
+                'Primary Sound' not in device['name'] and  # Skip primary sound devices
+                device['name'].strip()):  # Skip devices with empty names
+                
+                try:
+                    # Test if device is actually accessible
+                    with sd.InputStream(device=i, channels=1, samplerate=16000, blocksize=1024):
+                        pass
+                    input_devices.append({
+                        'id': i, 
+                        'name': device['name'].strip(),
+                        'hostapi_name': sd.query_hostapis(device['hostapi'])['name'],
+                        'max_input_channels': device['max_input_channels'],
+                        'default_samplerate': device['default_samplerate']
+                    })
+                except Exception as e:
+                    print(f"[STT] Device {i} ({device['name']}) is not accessible: {e}")
+                    continue
+        
         return input_devices
 
     def _load_model(self):
@@ -107,7 +129,12 @@ class RealTimeSTT:
                             transcribed_text = rich_transcription_postprocess(res[0]).strip() if res and res[0] else ""
 
                             if transcribed_text:
-                                self.on_text_transcribed(nickname, transcribed_text)
+                                try:
+                                    self.on_text_transcribed(nickname, transcribed_text)
+                                except Exception as e:
+                                    print(f"[STT] Error in callback: {e}")
+                                    import traceback
+                                    traceback.print_exc()
                             else:
                                 print("[STT] 변환된 텍스트가 없습니다.")
                     else:

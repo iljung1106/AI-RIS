@@ -1,0 +1,50 @@
+[
+  {
+    "memory_text": "사용자는 피자를 좋아하며, 특히 페퍼로니 피자를 선호합니다.",
+    "importance_level": "medium",
+    "category": "user_preference",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자의 이름은 김철수이고 대학생입니다.",
+    "importance_level": "high",
+    "category": "personal_info",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자는 고양이를 키우며 이름은 나비입니다.",
+    "importance_level": "high",
+    "category": "personal_info",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자는 주말에 등산을 자주 갑니다.",
+    "importance_level": "medium",
+    "category": "user_preference",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자의 생일은 3월 15일입니다.",
+    "importance_level": "high",
+    "category": "personal_info",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자는 프로그래밍을 공부하고 있으며 파이썬을 좋아합니다.",
+    "importance_level": "medium",
+    "category": "user_preference",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자는 커피보다 차를 선호합니다.",
+    "importance_level": "medium",
+    "category": "user_preference",
+    "timestamp": "2025-07-18 03:00:43"
+  },
+  {
+    "memory_text": "사용자는 클래식 음악을 좋아합니다.",
+    "importance_level": "medium",
+    "category": "user_preference",
+    "timestamp": "2025-07-18 03:00:43"
+  }
+]

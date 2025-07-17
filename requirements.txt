@@ -14,3 +14,4 @@ pyaudio
 google-generativeai
 customtkinter
 google-ai-generativelanguage
+pyvts

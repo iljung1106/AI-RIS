@@ -72,3 +72,9 @@ class LongTermMemory:
         if not self.memories:
             return "No long-term memories yet."
         return "\n".join(f"- {m}" for m in self.memories)
+
+    def get_all_memories(self) -> list:
+        """
+        Returns all memories as a list.
+        """
+        return list(self.memories)
