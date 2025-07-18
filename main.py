@@ -1,8 +1,13 @@
 # main.py
 import customtkinter as ctk # Changed from tkinter as tk
 import threading
+import os
+from dotenv import load_dotenv
 from app_orchestrator import AppOrchestrator
 from gui import AIYoutuberGUI
+
+# Load environment variables
+load_dotenv()
 
 # --- Configuration ---
 APP_CONFIG = {
@@ -24,12 +29,12 @@ APP_CONFIG = {
     },
     "chat": {
         "enabled": True,
-        "widget_url": "https://chzzk.naver.com/chat/aa954e33851f4ecda45ff964305ed59d",
+        "widget_url": os.getenv("CHZZK_WIDGET_URL"),
         "poll_interval_s": 2, "max_recent_chats": 20, "response_chance": 0.7
     },
     "llm": {
         "provider": "gemini",
-        "api_key": "AIzaSyAGjuJurM_H95siusSx5xcERAvDefCFaKk",
+        "api_key": os.getenv("GEMINI_API_KEY"),
         "model": "gemini-2.5-flash",
         "max_history": 50, "memory_path": "long_term_memory.json",
         "enable_memory_summarization": True, "memory_summarize_interval_s": 300,
@@ -54,7 +59,7 @@ def main():
     print("      AI Virtual Youtuber Prototype")
     print("==================================================")
     print("⚠️ Make sure the GPT-SoVITS API server is running.")
-    print("⚠️ Make sure you have set your Gemini API key and Chzzk URL.")
+    print("⚠️ Make sure you have set your Gemini API key and Chzzk URL in .env file.")
     print("--------------------------------------------------")
 
     # 1. Initialize the orchestrator

@@ -1,8 +1,13 @@
 import time
+import os
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
+
+# Load environment variables
+load_dotenv()
 
 class ChzzkChatScraper:
     """
@@ -114,7 +119,7 @@ if __name__ == "__main__":
     # URL: https://chzzk.naver.com/widget/chat/hanryang1125
     
     # ※ 실제 유효한 채널 ID로 변경해야 합니다.
-    TARGET_URL = "https://chzzk.naver.com/chat/aa954e33851f4ecda45ff964305ed59d" 
+    TARGET_URL = os.getenv("CHZZK_WIDGET_URL", "https://chzzk.naver.com/chat/aa954e33851f4ecda45ff964305ed59d") 
 
     # 스크레이퍼 객체 생성
     scraper = ChzzkChatScraper(TARGET_URL)

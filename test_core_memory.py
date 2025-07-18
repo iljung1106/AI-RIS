@@ -2,23 +2,20 @@
 """
 Core Memory 시스템 테스트 스크립트
 """
-import json
+import os
+from dotenv import load_dotenv
 from core_memory_processor import CoreMemoryProcessor
-from long_term_memory import LongTermMemory
+
+# Load environment variables
+load_dotenv()
 
 def test_core_memory():
     """Core Memory 시스템 테스트"""
     
-    # 설정 로드
-    with open('config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    
-    llm_config = config.get("llm", {})
-    
     # Core Memory Processor 초기화
     core_memory = CoreMemoryProcessor(
-        api_key=llm_config.get("api_key"),
-        model_name=llm_config.get("model"),
+        api_key=os.getenv("GEMINI_API_KEY"),
+        model_name="gemini-2.5-flash",
         core_memory_file="test_core_memory.json"
     )
     

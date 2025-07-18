@@ -15,3 +15,4 @@ google-generativeai
 customtkinter
 google-ai-generativelanguage
 pyvts
+python-dotenv
