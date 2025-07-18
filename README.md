@@ -31,7 +31,6 @@ AI-RIS is an advanced AI assistant system featuring Live2D model control, real-t
 - `audio_player.py`: TTS 재생 및 인터럽트 관리 / Manages TTS playback
 - `gui.py`: CustomTkinter 기반 GUI / CustomTkinter-based GUI
 - `requirements.txt`: 파이썬 의존성 / Python dependencies
-- `config.json`: 설정 파일 (메모리 주기, 경로 등) / Configuration settings
 - `core_memory.json`, `long_term_memory.json`: 메모리 저장 파일 / Persistent memory storage
 - `test_core_memory.py`: 코어 메모리 추출 테스트 / Test script for core memory
 
@@ -57,8 +56,7 @@ AI-RIS is an advanced AI assistant system featuring Live2D model control, real-t
    ```pwsh
    pip install -r requirements.txt
    ```
-2. `config.json`을 필요에 따라 설정 / Configure `config.json` as needed
-3. 프로그램 실행 / Run the application:
+2. 프로그램 실행 / Run the application:
    ```pwsh
    python main.py
    ```
